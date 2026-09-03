@@ -405,7 +405,7 @@
 
   // Inicialización del Mapa Leaflet
   window.onload = function() {
-    map = L.map('map').setView(BODEGA_COORDS, 12);
+    map = L.map('map').setView(BODEGA_COORDS, 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png', {
       maxZoom: 19,
@@ -416,7 +416,7 @@
     markerBodega = L.marker(BODEGA_COORDS).addTo(map)
       .bindPopup('<b>Bodega Provac (Origen)</b><br>Manuel P. de Llano 1106').openPopup();
 
-    // Marcador Destino Dragable
+    // Marcador Destino Dragable (inicializado cerca de la bodega)
     markerDestino = L.marker([25.6714, -100.3090], { draggable: true }).addTo(map)
       .bindPopup('Punto de Entrega (Arrastra para ajustar)');
 
@@ -435,33 +435,73 @@
     });
   };
 
-  // Buscar Dirección con OpenStreetMap Nominatim API
-  function buscarDireccion() {
-    const calle = document.getElementById('calle').value;
-    const colonia = document.getElementById('colonia').value;
-    const municipio = document.getElementById('municipio').value;
-    const cp = document.getElementById('cp').value;
+  // Funci&#243;n auxiliar para consultar Nominatim API
+  async function consultarNominatim(params) {
+    const query = new URLSearchParams({
+      format: 'json',
+      countrycodes: 'mx',
+      limit: '1',
+      ...params
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${query.toString()}`);
+    return await res.json();
+  }
 
-    const direccionCompleta = `${calle}, ${colonia}, ${municipio}, ${cp}, Mexico`;
+  // Buscar Direcci&#243;n Precisa con Estrategia de Respaldo
+  async function buscarDireccion() {
+    const calle = document.getElementById('calle').value.trim();
+    const colonia = document.getElementById('colonia').value.trim();
+    const municipio = document.getElementById('municipio').value.trim();
+    const cp = document.getElementById('cp').value.trim();
 
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(direccionCompleta)}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
-          const newLatLng = L.latLng(lat, lon);
+    if (!calle && !colonia && !municipio && !cp) {
+      alert("Por favor ingresa al menos la calle, colonia o municipio.");
+      return;
+    }
 
-          markerDestino.setLatLng(newLatLng);
-          map.setView(newLatLng, 13);
-          calcularRuta(newLatLng);
-        } else {
-          alert("No se encontró la dirección exacta. Por favor haz clic directamente en el mapa para marcar el punto.");
-        }
-      })
-      .catch(() => {
-        alert("Error al buscar la dirección. Por favor selecciona el punto directamente en el mapa.");
+    let data = [];
+
+    try {
+      // 1. Intento con Estructurado Completo
+      data = await consultarNominatim({
+        street: calle,
+        city: municipio,
+        postalcode: cp
       });
+
+      // 2. Si falla, intenta como texto libre combinado (incluyendo la Colonia)
+      if (!data || data.length === 0) {
+        const queryText = [calle, colonia, municipio, cp, "Nuevo Leon"].filter(Boolean).join(", ");
+        data = await consultarNominatim({ q: queryText });
+      }
+
+      // 3. Si falla, busca por Colonia + Municipio (aproximación local)
+      if ((!data || data.length === 0) && colonia) {
+        const queryText = `${colonia}, ${municipio}, Nuevo Leon`;
+        data = await consultarNominatim({ q: queryText });
+      }
+
+      // 4. Si falla, busca por Código Postal + Municipio
+      if ((!data || data.length === 0) && cp) {
+        data = await consultarNominatim({ postalcode: cp, city: municipio });
+      }
+
+      // Procesar resultado
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        const newLatLng = L.latLng(lat, lon);
+
+        markerDestino.setLatLng(newLatLng);
+        map.setView(newLatLng, 14);
+        calcularRuta(newLatLng);
+      } else {
+        alert("No fue posible ubicar la dirección exacta automáticamente. Por favor haz clic directamente en el mapa sobre el punto de entrega.");
+      }
+    } catch (error) {
+      console.error("Error al geolocalizar:", error);
+      alert("Ocurrió un error al buscar la dirección. Por favor selecciona la ubicación directamente en el mapa.");
+    }
   }
 
   // Calcular Ruta entre Bodega y Destino
@@ -487,6 +527,10 @@
           routingPolyline = L.geoJSON(geojsonFeature, {
             style: { color: '#d97706', weight: 4 }
           }).addTo(map);
+
+          // Ajustar la vista del mapa para ver el origen y el destino al mismo tiempo
+          const bounds = L.latLngBounds([BODEGA_COORDS, [destLatLng.lat, destLatLng.lng]]);
+          map.fitBounds(bounds, { padding: [40, 40] });
 
           calcularCotizacion();
         }
