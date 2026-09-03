@@ -122,7 +122,38 @@
       color: var(--text-muted);
     }
 
-    /* Barra de Progreso de Carga */
+    /* Botón GPS */
+    .btn-gps {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      width: 100%;
+      transition: background 0.2s;
+    }
+
+    .btn-gps:hover {
+      background: #2563eb;
+    }
+
+    .gps-status {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: -8px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    /* Monitor visual de peso Saveiro */
     .capacity-monitor {
       background: #f8fafc;
       border: 1px solid var(--border);
@@ -320,6 +351,12 @@
       </div>
     </div>
 
+    <!-- BOTÓN DE GPS PARA CÁLCULO AUTOMÁTICO -->
+    <button type="button" class="btn-gps" onclick="obtenerUbicacionYCalcular()">
+      📍 Usar mi ubicación actual para calcular distancia
+    </button>
+    <div id="gpsStatus" class="gps-status"></div>
+
     <div class="form-group">
       <label for="distanciaKm">Distancia Estimada desde Bodega (km)</label>
       <input type="number" id="distanciaKm" placeholder="Ej: 12" min="1" step="0.1">
@@ -334,7 +371,7 @@
 
     <!-- BOTÓN WHATSAPP -->
     <button type="button" id="btnWhatsapp" class="btn-whatsapp" disabled>
-      <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.156 4.221 4.299-1.127z"/></svg>
+      <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.156 4.221 4.299-1.127z"/></svg>
       Enviar Solicitud a WhatsApp (81 1761 6817)
     </button>
   </form>
@@ -346,11 +383,17 @@
 
 <script>
   // Configuración de WhatsApp y Saveiro
-  const NUMERO_WHATSAPP = "528117616817"; // México (+52)
+  const NUMERO_WHATSAPP = "528117616817";
   const SAVEIRO_LIMITS = {
     MAX_PESO: 650,        // kg
     MAX_ANCHO_UTIL: 100,  // cm
     MAX_VOLUMEN: 0.825    // m3
+  };
+
+  // Coordenadas Fijas de la Bodega Provac (Manuel P. de Llano 1106, Monterrey, NL)
+  const BODEGA_PROVAC = {
+    lat: 25.6866,
+    lon: -100.3161
   };
 
   // Tarifas de Cotización
@@ -369,7 +412,71 @@
     elem.addEventListener('input', calcularCotizacion);
   });
 
-  // Algoritmo Principal de Cotización
+  // --- LÓGICA DE GEOLOCALIZACIÓN GPS ---
+  function obtenerUbicacionYCalcular() {
+    const gpsStatus = document.getElementById('gpsStatus');
+
+    if (!navigator.geolocation) {
+      gpsStatus.innerText = "La geolocalización no es compatible con este navegador.";
+      return;
+    }
+
+    gpsStatus.innerText = "Obteniendo ubicación del GPS...";
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLat = position.coords.latitude;
+        const userLon = position.coords.longitude;
+
+        // Calcular distancia Haversine
+        const distanciaDirecta = calcularHaversine(userLat, userLon, BODEGA_PROVAC.lat, BODEGA_PROVAC.lon);
+        
+        // Multiplicador aproximado (1.30) para ajustar la línea recta a distancia vial estimada
+        const distanciaVialEstimada = Math.round((distanciaDirecta * 1.30) * 10) / 10;
+
+        // Asignar al input de distancia
+        document.getElementById('distanciaKm').value = distanciaVialEstimada;
+        gpsStatus.innerText = `Ubicación detectada (Distancia estimada: ${distanciaVialEstimada} km)`;
+
+        // Recalcular cotización de inmediato
+        calcularCotizacion();
+      },
+      (error) => {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            gpsStatus.innerText = "Permiso de ubicación denegado.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            gpsStatus.innerText = "Ubicación no disponible.";
+            break;
+          case error.TIMEOUT:
+            gpsStatus.innerText = "Expiró la solicitud de ubicación.";
+            break;
+          default:
+            gpsStatus.innerText = "Error al obtener ubicación.";
+            break;
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }
+
+  // Fórmula de Haversine
+  function calcularHaversine(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radio de la Tierra en km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // --- ALGORITMO PRINCIPAL DE COTIZACIÓN ---
   function calcularCotizacion() {
     const largo = parseFloat(document.getElementById('largo').value) || 0;
     const ancho = parseFloat(document.getElementById('ancho').value) || 0;
@@ -419,7 +526,7 @@
 
     if (distanciaKm <= 0) {
       precioTotalEl.innerText = "$0 MXN";
-      desgloseText.innerText = "Ingresa la distancia estimada en km";
+      desgloseText.innerText = "Ingresa la distancia estimada o usa tu GPS";
       return;
     }
 
