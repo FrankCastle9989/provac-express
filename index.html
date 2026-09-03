@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Provac Express - Cotizador de Fletes</title>
+  <style>
+    :root {
+      --primary: #d97706;
+      --primary-hover: #b45309;
+      --bg: #f3f4f6;
+      --card-bg: #ffffff;
+      --text: #1f2937;
+      --error: #dc2626;
+      --success: #16a34a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: var(--card-bg);
+      width: 100%;
+      max-width: 650px;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 25px;
+      border-bottom: 2px solid var(--bg);
+      padding-bottom: 15px;
+    }
+
+    header h1 {
+      color: var(--primary);
+      font-size: 1.8rem;
+    }
+
+    header p {
+      color: #6b7280;
+      font-size: 0.95rem;
+    }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 20px 0 10px 0;
+      color: #374151;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 12px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #4b5563;
+    }
+
+    input, select {
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+    }
+
+    /* Indicador de capacidad de carga */
+    .capacity-container {
+      margin-top: 15px;
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .progress-bar-bg {
+      background: #e5e7eb;
+      height: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--success);
+      transition: width 0.3s ease, background-color 0.3s ease;
+    }
+
+    /* Alertas */
+    .alert {
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .alert-error {
+      background: #fee2e2;
+      color: var(--error);
+      border: 1px solid #fca5a5;
+    }
+
+    /* Resultado de Cotización */
+    .result-box {
+      margin-top: 25px;
+      background: #fffbeeb;
+      border: 2px dashed var(--primary);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .result-box .price {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin: 10px 0;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: background 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-submit:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>PROVAC EXPRESS</h1>
+    <p>Cotizador automático de distribución al por mayor</p>
+  </header>
+
+  <form id="cotizadorForm">
+    <div class="section-title">Paso 1: Especificaciones de la Carga</div>
+    
+    <div class="grid">
+      <div class="form-group">
+        <label for="largo">Largo caja (cm)</label>
+        <input type="number" id="largo" placeholder="Ej: 40" required min="1">
+      </div>
+      <div class="form-group">
+        <label for="ancho">Ancho caja (cm)</label>
+        <input type="number" id="ancho" placeholder="Ej: 30" required min="1">
+      </div>
+      <div class="form-group">
+        <label for="alto">Alto caja (cm)</label>
+        <input type="number" id="alto" placeholder="Ej: 30" required min="1">
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="form-group">
+        <label for="peso">Peso por caja (kg)</label>
+        <input type="number" id="peso" step="0.1" placeholder="Ej: 12.5" required min="0.1">
+      </div>
+      <div class="form-group">
+        <label for="cantidad">Cantidad de cajas</label>
+        <input type="number" id="cantidad" placeholder="Ej: 35" required min="1">
+      </div>
+    </div>
+
+    <div class="capacity-container">
+      <div style="display:flex; justify-content:space-between; font-size: 0.85rem;">
+        <span>Ocupación de peso (Máx 650 kg):</span>
+        <strong id="pesoText">0 kg / 650 kg</strong>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="pesoBar" class="progress-bar-fill"></div>
+      </div>
+    </div>
+
+    <div id="alertBox" class="alert alert-error"></div>
+
+    <div class="section-title">Paso 2: Ruta y Servicios</div>
+
+    <div class="form-group">
+      <label for="distancia">Distancia de entrega (km)</label>
+      <input type="number" id="distancia" placeholder="Ej: 15" required min="1">
+    </div>
+
+    <div class="form-group">
+      <label for="maniobra">Servicio de Maniobra (Carga/Descarga)</label>
+      <select id="maniobra">
+        <option value="sin">Sin maniobra (Cliente sube y baja mercancía)</option>
+        <option value="con">Con maniobra (Provac realiza carga/descarga)</option>
+      </select>
+    </div>
+
+    <div class="result-box">
+      <div>Total Estimado del Flete</div>
+      <div class="price" id="precioTotal">$0 MXN</div>
+      <small id="desgloseText">Ingresa los datos para calcular</small>
+    </div>
+
+    <button type="button" id="btnWhatsapp" class="btn-submit" disabled>Solicitar Servicio por WhatsApp</button>
+  </form>
+</div>
+
+<script>
+  // Especificaciones técnicas fijas de la Volkswagen Saveiro
+  const SAVEIRO_LIMITS = {
+    MAX_PESO: 650,             // kg
+    MAX_LARGO: 165,            // cm
+    MAX_ANCHO_UTIL: 100,       // cm (entre pasos de rueda)
+    MAX_VOLUMEN: 0.825         // m3 (hasta barandal)
+  };
+
+  // Parámetros de Tarifas Provac
+  const TARIFA_BASE = 200;       // MXN (Arranque)
+  const PRECIO_KM = 14;          // MXN por kilometro
+  const PRECIO_MANIOBRA_CAJA = 3.5; // MXN por caja
+
+  // Elementos DOM
+  const inputs = document.querySelectorAll('input, select');
+  const alertBox = document.getElementById('alertBox');
+  const pesoBar = document.getElementById('pesoBar');
+  const pesoText = document.getElementById('pesoText');
+  const precioTotalEl = document.getElementById('precioTotal');
+  const desgloseText = document.getElementById('desgloseText');
+  const btnWhatsapp = document.getElementById('btnWhatsapp');
+
+  // Event Listeners para recálculo automático
+  inputs.forEach(input => {
+    input.addEventListener('input', calcular);
+  });
+
+  function calcular() {
+    const largo = parseFloat(document.getElementById('largo').value) || 0;
+    const ancho = parseFloat(document.getElementById('ancho').value) || 0;
+    const alto = parseFloat(document.getElementById('alto').value) || 0;
+    const pesoUnitario = parseFloat(document.getElementById('peso').value) || 0;
+    const cantidad = parseInt(document.getElementById('cantidad').value) || 0;
+    const distancia = parseFloat(document.getElementById('distancia').value) || 0;
+    const requiereManiobra = document.getElementById('maniobra').value === 'con';
+
+    // Resetear Alertas
+    alertBox.style.display = 'none';
+    btnWhatsapp.disabled = true;
+
+    if (cantidad === 0 || pesoUnitario === 0) {
+      actualizarBarraPeso(0);
+      precioTotalEl.innerText = "$0 MXN";
+      desgloseText.innerText = "Ingresa los datos para calcular";
+      return;
+    }
+
+    // 1. Cálculos Físicos
+    const pesoTotal = pesoUnitario * cantidad;
+    const volumenTotalM3 = ((largo * ancho * alto) / 1000000) * cantidad;
+
+    actualizarBarraPeso(pesoTotal);
+
+    // 2. Validaciones Físicas de Carga
+    let errorMsg = "";
+
+    // Validación A: Exceso de peso
+    if (pesoTotal > SAVEIRO_LIMITS.MAX_PESO) {
+      errorMsg = `🔴 Exceso de peso: Tu carga suma ${pesoTotal.toFixed(1)} kg. El límite máximo de la Saveiro es de 650 kg.`;
+    } 
+    // Validación B: Exceso de ancho (paso de ruedas)
+    else if (ancho > SAVEIRO_LIMITS.MAX_ANCHO_UTIL && largo > SAVEIRO_LIMITS.MAX_ANCHO_UTIL) {
+      errorMsg = `🟡 Dimensión no permitida: Las dimensiones de tu caja (${largo}x${ancho} cm) exceden el ancho libre de la camioneta (100 cm).`;
+    }
+    // Validación C: Volumen
+    else if (volumenTotalM3 > SAVEIRO_LIMITS.MAX_VOLUMEN) {
+      errorMsg = `🟡 Exceso de volumen: La mercancía ocupa ${volumenTotalM3.toFixed(2)} m³, superando la batea estándar (0.82 m³). Contactar para evaluación.`;
+    }
+
+    if (errorMsg !== "") {
+      alertBox.innerText = errorMsg;
+      alertBox.style.display = 'block';
+      precioTotalEl.innerText = "No disponible";
+      desgloseText.innerText = "Ajusta la mercancía para obtener precio";
+      return;
+    }
+
+    // 3. Algoritmo de Cotización de Precio (Si pasa las validaciones)
+    if (distancia > 0) {
+      // Factor por carga pesada (> 400 kg)
+      let factorPeso = pesoTotal > 400 ? 1.15 : 1.0;
+      
+      let costoDistancia = distancia * PRECIO_KM;
+      let costoManiobra = requiereManiobra ? (cantidad * PRECIO_MANIOBRA_CAJA) : 0;
+      
+      let precioFinal = Math.round(((TARIFA_BASE + costoDistancia) * factorPeso) + costoManiobra);
+
+      precioTotalEl.innerText = `$${precioFinal.toLocaleString()} MXN`;
+      desgloseText.innerText = `Incluye: Tarifa base + ${distancia} km ${requiereManiobra ? '+ maniobra' : ''}`;
+      
+      btnWhatsapp.disabled = false;
+      
+      // Configurar enlace de WhatsApp
+      btnWhatsapp.onclick = () => {
+        const mensaje = `Hola Provac, quiero solicitar un flete con estos datos:%0A` +
+          `- Mercancía: ${cantidad} cajas de ${pesoUnitario} kg c/u (Total: ${pesoTotal} kg)%0A` +
+          `- Dimensiones caja: ${largo}x${ancho}x${alto} cm%0A` +
+          `- Distancia: ${distancia} km%0A` +
+          `- Maniobra: ${requiereManiobra ? 'Sí' : 'No'}%0A` +
+          `- Cotización estimada: $${precioFinal} MXN`;
+        window.open(`https://wa.me/?text=${mensaje}`, '_blank');
+      };
+    } else {
+      precioTotalEl.innerText = "$0 MXN";
+      desgloseText.innerText = "Ingresa la distancia en km para cotizar";
+    }
+  }
+
+  function actualizarBarraPeso(pesoTotal) {
+    const porcentaje = Math.min((pesoTotal / SAVEIRO_LIMITS.MAX_PESO) * 100, 100);
+    pesoBar.style.width = `${porcentaje}%`;
+    pesoText.innerText = `${pesoTotal.toFixed(1)} kg / ${SAVEIRO_LIMITS.MAX_PESO} kg`;
+
+    if (pesoTotal > SAVEIRO_LIMITS.MAX_PESO) {
+      pesoBar.style.background = "var(--error)";
+    } else if (porcentaje > 80) {
+      pesoBar.style.background = "#eab308"; // Amarillo advertencia
+    } else {
+      pesoBar.style.background = "var(--success)";
+    }
+  }
+</script>
+</body>
+</html>
